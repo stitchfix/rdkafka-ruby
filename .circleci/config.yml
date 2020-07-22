@@ -8,6 +8,9 @@ jobs:
     - image: circleci/ruby:2.7.1
     steps:
     - checkout
+    - run:
+        name: build librdkafka
+        command: cd ext && bundle exec rake && cd ..
     - run: bundle config stitchfix01.jfrog.io $ARTIFACTORY_USER:$ARTIFACTORY_TOKEN
     - run: bundle install --full-index
     - run:
@@ -23,6 +26,9 @@ jobs:
     working_directory: "~/rdkafka-ruby"
     steps:
     - checkout
+    - run:
+        name: build librdkafka
+        command: cd ext && bundle exec rake && cd ..
     - run:
         name: Check for Gemfile.lock presence
         command: ' if (test -f Gemfile.lock) then echo "Dont commit Gemfile.lock (see
@@ -48,6 +54,9 @@ jobs:
     working_directory: "~/rdkafka-ruby"
     steps:
     - checkout
+    - run:
+        name: build librdkafka
+        command: cd ext && bundle exec rake && cd ..
     - run:
         name: Check for Gemfile.lock presence
         command: ' if (test -f Gemfile.lock) then echo "Dont commit Gemfile.lock (see
