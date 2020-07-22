@@ -1,0 +1,106 @@
+# DO NOT MODIFY - this is managed by Git Reduce in goro
+#
+---
+version: 2
+jobs:
+  release:
+    docker:
+    - image: circleci/ruby:2.7.1
+    steps:
+    - checkout
+    - run: bundle config stitchfix01.jfrog.io $ARTIFACTORY_USER:$ARTIFACTORY_TOKEN
+    - run: bundle install --full-index
+    - run:
+        name: Artifactory login
+        command: mkdir -p ~/.gem && curl -u$ARTIFACTORY_USER:$ARTIFACTORY_TOKEN https://stitchfix01.jfrog.io/stitchfix01/api/gems/eng-gems/api/v1/api_key.yaml
+          > ~/.gem/credentials && chmod 0600 ~/.gem/credentials
+    - run:
+        name: Build/release gem to artifactory
+        command: bundle exec rake push_artifactory
+  ruby-2.7.1:
+    docker:
+    - image: circleci/ruby:2.7.1
+    working_directory: "~/rdkafka-ruby"
+    steps:
+    - checkout
+    - run:
+        name: Check for Gemfile.lock presence
+        command: ' if (test -f Gemfile.lock) then echo "Dont commit Gemfile.lock (see
+          https://github.com/stitchfix/eng-wiki/blob/master/architecture-decisions/0009-rubygem-dependencies-will-be-managed-more-explicitly.md)"
+          1>&2 ; exit 1 ; else exit 0 ; fi '
+    - run: bundle config stitchfix01.jfrog.io $ARTIFACTORY_USER:$ARTIFACTORY_TOKEN
+    - run: bundle install --full-index
+    - run: bundle exec rspec --format RspecJunitFormatter --out /tmp/test-results/rspec.xml
+        --format=doc
+    - run:
+        name: Run Additional CI Steps
+        command: if [ -e bin/additional-ci-steps ]; then bin/additional-ci-steps;
+          fi
+    - run:
+        name: Notify Pager Duty
+        command: bundle exec y-notify "#eng-messaging-ops"
+        when: on_fail
+    - store_test_results:
+        path: "/tmp/test-results"
+  ruby-2.6.6:
+    docker:
+    - image: circleci/ruby:2.6.6
+    working_directory: "~/rdkafka-ruby"
+    steps:
+    - checkout
+    - run:
+        name: Check for Gemfile.lock presence
+        command: ' if (test -f Gemfile.lock) then echo "Dont commit Gemfile.lock (see
+          https://github.com/stitchfix/eng-wiki/blob/master/architecture-decisions/0009-rubygem-dependencies-will-be-managed-more-explicitly.md)"
+          1>&2 ; exit 1 ; else exit 0 ; fi '
+    - run: bundle config stitchfix01.jfrog.io $ARTIFACTORY_USER:$ARTIFACTORY_TOKEN
+    - run: bundle install --full-index
+    - run: bundle exec rspec --format RspecJunitFormatter --out /tmp/test-results/rspec.xml
+        --format=doc
+    - run:
+        name: Run Additional CI Steps
+        command: if [ -e bin/additional-ci-steps ]; then bin/additional-ci-steps;
+          fi
+    - run:
+        name: Notify Pager Duty
+        command: bundle exec y-notify "#eng-messaging-ops"
+        when: on_fail
+    - store_test_results:
+        path: "/tmp/test-results"
+workflows:
+  version: 2
+  on-commit:
+    jobs:
+    - release:
+        context: org-global
+        requires:
+        - ruby-2.7.1
+        - ruby-2.6.6
+        filters:
+          tags:
+            only: /^[0-9]+\.[0-9]+\.[0-9]+(\.?(RC|rc)[-\.]?\d*)?$/
+          branches:
+            ignore: /.*/
+    - ruby-2.7.1:
+        context: org-global
+        filters:
+          tags:
+            only: &1 /.*/
+    - ruby-2.6.6:
+        context: org-global
+        filters:
+          tags:
+            only: *1
+  scheduled:
+    triggers:
+    - schedule:
+        cron: 0 17 * * 1,2,3,4,5
+        filters:
+          branches:
+            only:
+            - master
+    jobs:
+    - ruby-2.7.1:
+        context: org-global
+    - ruby-2.6.6:
+        context: org-global
