@@ -11,6 +11,10 @@ module Rdkafka
     def initialize(native_kafka)
       @closing = false
       @native_kafka = native_kafka
+
+      # Makes sure, that the producer gets closed before it gets GCed by Ruby
+      ObjectSpace.define_finalizer(self, proc { close })
+
       # Start thread to poll client for delivery callbacks
       @polling_thread = Thread.new do
         loop do
@@ -55,7 +59,7 @@ module Rdkafka
     # @return partition count [Integer,nil]
     #
     def partition_count(topic)
-      Rdkafka::Metadata.new(@native_kafka, topic).topics&.select { |x| x[:topic_name] == topic }&.dig(0, :partition_count)
+      Rdkafka::Metadata.new(@native_kafka, topic).topics&.first[:partition_count]
     end
 
     # Produces a message to a Kafka topic. The message is added to rdkafka's queue, call {DeliveryHandle#wait wait} on the returned delivery handle to make sure it is delivered.
@@ -117,7 +121,7 @@ module Rdkafka
       delivery_handle[:response] = -1
       delivery_handle[:partition] = -1
       delivery_handle[:offset] = -1
-      DeliveryHandle.register(delivery_handle.to_ptr.address, delivery_handle)
+      DeliveryHandle.register(delivery_handle)
 
       args = [
         :int, Rdkafka::Bindings::RD_KAFKA_VTYPE_TOPIC, :string, topic,
